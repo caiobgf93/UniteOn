@@ -21,6 +21,7 @@ import {
 import { CollisionGrid, facingFrom, tryMove } from '@uniteon/game';
 import { io, type Socket } from 'socket.io-client';
 import type { Container, Graphics } from 'pixi.js';
+import { authConfigured, getSupabase } from '../../lib/supabaseClient';
 
 const SCALE = 2;
 const SPEED = 2.4;
@@ -75,10 +76,27 @@ export function OfficeCanvas() {
       const PIXI = await import('pixi.js');
       if (destroyed || !hostRef.current) return;
 
-      // Identidade (mock até o Épico 0): ?name=Caio na URL, senão convidado aleatório.
-      const params = new URLSearchParams(window.location.search);
-      const name = params.get('name') ?? `Convidado-${Math.floor(1000 + Math.random() * 9000)}`;
-      const userId = params.get('name') ?? `u-${Math.random().toString(36).slice(2, 8)}`;
+      // Identidade: Supabase Auth quando configurado; senão mock por ?name= (dev).
+      let userId: string;
+      let name: string;
+      let token: string | null = null;
+      if (authConfigured) {
+        const supabase = getSupabase();
+        const { data } = await supabase!.auth.getSession();
+        if (destroyed) return;
+        if (!data.session) {
+          window.location.href = '/login';
+          return;
+        }
+        userId = data.session.user.id;
+        const meta = data.session.user.user_metadata as { name?: string } | undefined;
+        name = meta?.name || data.session.user.email?.split('@')[0] || 'Colega';
+        token = data.session.access_token;
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        name = params.get('name') ?? `Convidado-${Math.floor(1000 + Math.random() * 9000)}`;
+        userId = params.get('name') ?? `u-${Math.random().toString(36).slice(2, 8)}`;
+      }
       setMe(name);
 
       const map = buildOfficeTilemap();
@@ -198,7 +216,7 @@ export function OfficeCanvas() {
       // Socket realtime.
       const socket: Socket = io(REALTIME_URL, {
         transports: ['websocket'],
-        auth: { userId, name },
+        auth: token ? { token } : { devName: name, devUserId: userId },
       });
       socket.on('connect', () => socket.emit('join_space', { spaceId: DEMO_SPACE_ID }));
       socket.on('space_state', (s: SpaceState) => s.participants.forEach(upsertRemote));

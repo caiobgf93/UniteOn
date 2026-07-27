@@ -22,6 +22,7 @@ import {
 } from '@uniteon/shared';
 import { isValidPosition, spawn, zoneIdAt, zones } from '../world/world';
 import { MediaService } from '../media/media.service';
+import { resolveIdentity, type Identity } from '../auth/identity';
 import { PresenceStore, type PresenceRecord } from './presence.store';
 
 interface Session {
@@ -63,17 +64,14 @@ export class PresenceGateway
   }
 
   handleConnection(client: Socket): void {
-    const auth = client.handshake.auth as {
-      userId?: string;
-      name?: string;
-      role?: Role;
-    };
-    if (!auth?.name) {
-      client.emit('error_event', { code: 'NO_IDENTITY', message: 'Identidade ausente' });
+    const identity = resolveIdentity(client.handshake.auth ?? {});
+    if (!identity) {
+      client.emit('error_event', { code: 'UNAUTHENTICATED', message: 'Autenticação inválida' });
       client.disconnect(true);
       return;
     }
-    this.logger.log(`connected ${client.id} (${auth.name})`);
+    client.data.identity = identity;
+    this.logger.log(`connected ${client.id} (${identity.name})`);
   }
 
   @SubscribeMessage('join_space')
@@ -81,15 +79,19 @@ export class PresenceGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { spaceId: string },
   ): Promise<void> {
-    const auth = client.handshake.auth as { userId?: string; name?: string; role?: Role };
-    const userId = auth.userId ?? client.id;
+    const identity = client.data.identity as Identity | undefined;
+    if (!identity) {
+      client.disconnect(true);
+      return;
+    }
+    const userId = identity.userId;
     const spaceId = body.spaceId;
 
     const session: Session = {
       socket: client,
       userId,
-      name: auth.name ?? 'Convidado',
-      role: auth.role ?? 'COLABORADOR',
+      name: identity.name,
+      role: identity.role,
       spaceId,
       x: spawn.x,
       y: spawn.y,
