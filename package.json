@@ -1,0 +1,27 @@
+{
+  "name": "uniteon",
+  "version": "0.0.0",
+  "private": true,
+  "description": "UniteOn — escritório virtual colaborativo em tempo real",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @uniteon/api db:migrate",
+    "db:seed": "pnpm --filter @uniteon/api db:seed",
+    "db:generate": "pnpm --filter @uniteon/api db:generate",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.0",
+    "typescript": "^5.6.0",
+    "prettier": "^3.3.0"
+  }
+}

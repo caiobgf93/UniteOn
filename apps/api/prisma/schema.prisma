@@ -1,0 +1,205 @@
+// UniteOn — schema inicial. Ver docs/DATABASE.md.
+// Regra: toda mudança de schema passa por migration versionada (nunca `db push` em prod).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  GESTOR
+  COLABORADOR
+  VISITANTE
+}
+
+enum PermissionAction {
+  view
+  create
+  edit
+  delete
+}
+
+enum ZoneType {
+  RECEPTION
+  HALLWAY
+  OFFICE
+  MEETING
+  LOUNGE
+  OPEN
+}
+
+enum AudioMode {
+  ZONE
+  NONE
+}
+
+enum ChatScope {
+  GLOBAL
+  ZONE
+  DM
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  logoUrl   String?
+  plan      String   @default("free")
+  createdAt DateTime @default(now())
+
+  memberships    Membership[]
+  spaces         Space[]
+  accessProfiles AccessProfile[]
+  chatChannels   ChatChannel[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  avatarConfig Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  memberships Membership[]
+  messages    Message[]
+}
+
+model Membership {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  role           Role     @default(COLABORADOR)
+  accessProfileId String?
+  createdAt      DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accessProfile AccessProfile? @relation(fields: [accessProfileId], references: [id])
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model AccessProfile {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  ProfilePermission[]
+  memberships  Membership[]
+}
+
+model ProfilePermission {
+  id              String           @id @default(uuid())
+  accessProfileId String
+  module          String
+  action          PermissionAction
+
+  accessProfile AccessProfile @relation(fields: [accessProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([accessProfileId, module, action])
+}
+
+model Space {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  slug           String
+  createdAt      DateTime @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  layouts      Layout[]
+  zones        Zone[]
+  objects      InteractiveObject[]
+  chatChannels ChatChannel[]
+
+  @@unique([organizationId, slug])
+}
+
+model Layout {
+  id        String   @id @default(uuid())
+  spaceId   String
+  version   Int      @default(1)
+  tilemap   Json
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@index([spaceId])
+}
+
+model Zone {
+  id          String    @id @default(uuid())
+  spaceId     String
+  name        String
+  type        ZoneType
+  bounds      Json // { x, y, w, h }
+  audioMode   AudioMode @default(ZONE)
+  permissions Json      @default("{}")
+  createdAt   DateTime  @default(now())
+
+  space   Space               @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  objects InteractiveObject[]
+
+  @@index([spaceId])
+}
+
+model InteractiveObject {
+  id        String   @id @default(uuid())
+  spaceId   String
+  zoneId    String?
+  type      String
+  x         Int
+  y         Int
+  config    Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  zone  Zone? @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+
+  @@index([spaceId])
+}
+
+model ChatChannel {
+  id             String    @id @default(uuid())
+  organizationId String
+  scope          ChatScope
+  spaceId        String?
+  zoneId         String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space        Space?       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  members      ChatChannelMember[]
+}
+
+model ChatChannelMember {
+  channelId String
+  userId    String
+
+  channel ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  channelId String
+  senderId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  channel ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender  User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt])
+}

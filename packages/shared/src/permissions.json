@@ -1,0 +1,12 @@
+{
+  "modules": [
+    { "key": "space", "label": "Espaços" },
+    { "key": "zone", "label": "Salas" },
+    { "key": "layout", "label": "Layout do mapa" },
+    { "key": "object", "label": "Objetos" },
+    { "key": "chat", "label": "Chat" },
+    { "key": "member", "label": "Membros" },
+    { "key": "profile", "label": "Perfis de acesso" }
+  ],
+  "actions": ["view", "create", "edit", "delete"]
+}
