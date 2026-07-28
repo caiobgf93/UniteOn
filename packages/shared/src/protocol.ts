@@ -10,15 +10,17 @@ import type {
   Vec2,
   Zone,
 } from './domain';
+import type { AvatarConfig } from './avatar';
 
 export const TICK_HZ = 12;
 export const TICK_MS = Math.round(1000 / TICK_HZ);
 
 /** Eventos emitidos pelo cliente. */
 export interface ClientToServerEvents {
-  join_space: (p: { spaceId: string }) => void;
+  join_space: (p: { spaceId: string; avatarConfig?: AvatarConfig }) => void;
   move: (p: { x: number; y: number; dir: Direction }) => void;
   set_status: (p: { status: PresenceStatus }) => void;
+  set_avatar: (p: { avatarConfig: AvatarConfig }) => void;
   chat_send: (p: { channelId: string; body: string }) => void;
   interact_object: (p: { objectId: string }) => void;
   request_media_token: (p: { zoneId: string }) => void;
@@ -55,6 +57,7 @@ export interface ServerToClientEvents {
   presence_leave: (p: { userId: string }) => void;
   avatar_moved: (p: { updates: MoveUpdate[] }) => void;
   status_changed: (p: { userId: string; status: PresenceStatus }) => void;
+  avatar_changed: (p: { userId: string; avatarConfig: AvatarConfig }) => void;
   zone_changed: (p: {
     userId: string;
     fromZoneId: string | null;

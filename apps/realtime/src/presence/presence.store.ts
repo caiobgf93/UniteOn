@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
-import type { PresenceStatus, Role } from '@uniteon/shared';
+import type { AvatarConfig, PresenceStatus, Role } from '@uniteon/shared';
 import { REDIS } from '../redis/redis.module';
 
 /** Registro de presença persistido (fonte para novos entrantes). */
@@ -13,6 +13,7 @@ export interface PresenceRecord {
   dir: 'down' | 'up' | 'left' | 'right';
   status: PresenceStatus;
   zoneId: string | null;
+  avatarConfig: AvatarConfig;
 }
 
 /**

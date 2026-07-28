@@ -9,7 +9,10 @@ import {
   TILE_SIZE,
   buildOfficeTilemap,
   buildOfficeZones,
+  isValidAvatarConfig,
+  randomAvatarConfig,
   resolveZone,
+  type AvatarConfig,
   type Direction,
   type MediaToken,
   type MoveUpdate,
@@ -81,6 +84,7 @@ export function OfficeCanvas() {
       let userId: string;
       let name: string;
       let token: string | null = null;
+      let avatarConfig: AvatarConfig | undefined;
       if (authConfigured) {
         const supabase = getSupabase();
         const { data } = await supabase!.auth.getSession();
@@ -93,15 +97,20 @@ export function OfficeCanvas() {
         const meta = data.session.user.user_metadata as { name?: string } | undefined;
         name = meta?.name || data.session.user.email?.split('@')[0] || 'Colega';
         token = data.session.access_token;
-        // Provisiona (upsert) usuário + membership no banco a cada entrada. Fire-and-forget.
-        fetch(`${API_URL}/me`, { headers: { Authorization: `Bearer ${token}` } }).catch((e) =>
-          console.warn('[uniteon] /me falhou', e),
-        );
+        // Provisiona (upsert) usuário + membership no banco e busca o avatar salvo.
+        try {
+          const res = await fetch(`${API_URL}/me`, { headers: { Authorization: `Bearer ${token}` } });
+          const profile = await res.json();
+          if (isValidAvatarConfig(profile?.avatarConfig)) avatarConfig = profile.avatarConfig;
+        } catch (e) {
+          console.warn('[uniteon] /me falhou', e);
+        }
       } else {
         const params = new URLSearchParams(window.location.search);
         name = params.get('name') ?? `Convidado-${Math.floor(1000 + Math.random() * 9000)}`;
         userId = params.get('name') ?? `u-${Math.random().toString(36).slice(2, 8)}`;
       }
+      if (!avatarConfig) avatarConfig = randomAvatarConfig();
       setMe(name);
 
       const map = buildOfficeTilemap();
@@ -223,7 +232,7 @@ export function OfficeCanvas() {
       const socket: Socket = io(REALTIME_URL, {
         auth: token ? { token } : { devName: name, devUserId: userId },
       });
-      socket.on('connect', () => socket.emit('join_space', { spaceId: DEMO_SPACE_ID }));
+      socket.on('connect', () => socket.emit('join_space', { spaceId: DEMO_SPACE_ID, avatarConfig }));
       socket.on('connect_error', (err) => console.warn('[uniteon] socket connect_error:', err.message));
       socket.on('error_event', (e) => console.warn('[uniteon] server error_event:', e));
       socket.on('space_state', (s: SpaceState) => s.participants.forEach(upsertRemote));

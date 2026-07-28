@@ -12,7 +12,10 @@ import {
 import type { Server, Socket } from 'socket.io';
 import {
   TICK_MS,
+  isValidAvatarConfig,
+  randomAvatarConfig,
   zoneRoomName,
+  type AvatarConfig,
   type ClientToServerEvents,
   type Direction,
   type Participant,
@@ -36,6 +39,7 @@ interface Session {
   dir: Direction;
   status: PresenceStatus;
   zoneId: string | null;
+  avatarConfig: AvatarConfig;
   dirty: boolean;
 }
 
@@ -77,7 +81,21 @@ export class PresenceGateway
   @SubscribeMessage('join_space')
   async onJoinSpace(
     @ConnectedSocket() client: Socket,
-    @MessageBody() body: { spaceId: string },
+    @MessageBody() body: { spaceId: string; avatarConfig?: AvatarConfig },
+  ): Promise<void> {
+    try {
+      await this.onJoinSpaceInner(client, body);
+    } catch (err) {
+      // Sem isso, uma exceção aqui derruba a conexão em silêncio (o cliente só
+      // vê "io server disconnect", sem pista nenhuma do motivo real).
+      // eslint-disable-next-line no-console
+      console.error('[uniteon] onJoinSpace falhou:', err);
+    }
+  }
+
+  private async onJoinSpaceInner(
+    client: Socket,
+    body: { spaceId: string; avatarConfig?: AvatarConfig },
   ): Promise<void> {
     const identity = client.data.identity as Identity | undefined;
     if (!identity) {
@@ -86,6 +104,9 @@ export class PresenceGateway
     }
     const userId = identity.userId;
     const spaceId = body.spaceId;
+    // Cliente autenticado manda o avatarConfig (veio do /me); mock de dev ou
+    // payload ausente/inválido cai pra um avatar aleatório.
+    const avatarConfig = isValidAvatarConfig(body.avatarConfig) ? body.avatarConfig : randomAvatarConfig();
 
     const session: Session = {
       socket: client,
@@ -98,6 +119,7 @@ export class PresenceGateway
       dir: 'down',
       status: 'WORKING',
       zoneId: zoneIdAt(spawn.x, spawn.y),
+      avatarConfig,
       dirty: false,
     };
     this.sessions.set(client.id, session);
@@ -190,6 +212,20 @@ export class PresenceGateway
       .emit('status_changed', { userId: s.userId, status: s.status });
   }
 
+  @SubscribeMessage('set_avatar')
+  onSetAvatar(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { avatarConfig: AvatarConfig },
+  ): void {
+    const s = this.sessions.get(client.id);
+    if (!s || !isValidAvatarConfig(body.avatarConfig)) return;
+    s.avatarConfig = body.avatarConfig;
+    void this.presence.put(s.spaceId, toRecord(s));
+    this.server
+      .to(this.room(s.spaceId))
+      .emit('avatar_changed', { userId: s.userId, avatarConfig: s.avatarConfig });
+  }
+
   @SubscribeMessage('heartbeat')
   onHeartbeat(): void {
     // Mantido para TTL futuro; disconnect já limpa a presença.
@@ -236,6 +272,7 @@ function toRecord(s: Session): PresenceRecord {
     dir: s.dir,
     status: s.status,
     zoneId: s.zoneId,
+    avatarConfig: s.avatarConfig,
   };
 }
 
@@ -248,5 +285,6 @@ function toParticipant(r: PresenceRecord): Participant {
     direction: r.dir,
     status: r.status,
     zoneId: r.zoneId,
+    avatarConfig: r.avatarConfig,
   };
 }

@@ -3,6 +3,7 @@
  * Fonte única da verdade para enums e formas de dados que cruzam a fronteira
  * cliente/servidor.
  */
+import type { AvatarConfig } from './avatar';
 
 export type Role =
   | 'SUPER_ADMIN'
@@ -71,6 +72,7 @@ export interface Participant {
   direction: Direction;
   status: PresenceStatus;
   zoneId: string | null;
+  avatarConfig: AvatarConfig;
 }
 
 /** Identidade autenticada carregada no JWT. */
