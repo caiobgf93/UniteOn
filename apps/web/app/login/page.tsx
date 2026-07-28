@@ -18,7 +18,7 @@ export default function LoginPage() {
     void getSupabase()
       ?.auth.getSession()
       .then(({ data }) => {
-        if (data.session) window.location.href = '/office';
+        if (data.session) window.location.href = '/avatar';
       });
   }, []);
 
@@ -31,7 +31,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) setError(error.message);
-    else window.location.href = '/office';
+    else window.location.href = '/avatar';
   };
 
   return (

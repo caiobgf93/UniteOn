@@ -550,6 +550,22 @@ export function OfficeCanvas() {
         <span style={{ color: '#aeb4c6', fontSize: 12, minWidth: 90 }}>
           {audioRoom ? 'áudio conectado' : 'sem áudio'}
         </span>
+        <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.15)' }} />
+        <button
+          onClick={() => (window.location.href = '/avatar?returnTo=/office')}
+          title="Editar avatar"
+          style={{
+            fontSize: 13,
+            padding: '8px 12px',
+            borderRadius: 8,
+            cursor: 'pointer',
+            border: '1px solid #3a4056',
+            color: '#e8eaf2',
+            background: 'transparent',
+          }}
+        >
+          🧍 Avatar
+        </button>
       </div>
     </div>
   );
