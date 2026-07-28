@@ -21,10 +21,12 @@ import {
   type SpaceState,
   type Zone,
 } from '@uniteon/shared';
-import { CollisionGrid, facingFrom, tryMove } from '@uniteon/game';
+import { AvatarSprite, CollisionGrid, facingFrom, tryMove } from '@uniteon/game';
 import { io, type Socket } from 'socket.io-client';
-import type { Container, Graphics } from 'pixi.js';
+import type { Container, Text } from 'pixi.js';
 import { authConfigured, getSupabase } from '../../lib/supabaseClient';
+
+const ASSETS_BASE = '/assets/';
 
 const SCALE = 2;
 const SPEED = 2.4;
@@ -40,13 +42,6 @@ const ZONE_COLOR: Record<string, number> = {
 };
 
 const ZONES: Zone[] = buildOfficeZones();
-
-const FACE_OFFSET: Record<Direction, [number, number]> = {
-  down: [0, 6],
-  up: [0, -6],
-  left: [-6, 2],
-  right: [6, 2],
-};
 
 const STATUS_COLOR: Record<PresenceStatus, number> = {
   WORKING: 0x35c46a,
@@ -125,6 +120,11 @@ export function OfficeCanvas() {
         return;
       }
       hostRef.current.appendChild(app.canvas);
+      // Não usamos clique/hover em objetos do mundo — desativa o hit-testing
+      // de ponteiro do Pixi (evita um bug de compatibilidade do EventBoundary
+      // nesta versão: "currentTarget.isInteractive is not a function").
+      app.stage.eventMode = 'none';
+      app.stage.interactiveChildren = false;
 
       const world = new PIXI.Container();
       world.scale.set(SCALE);
@@ -163,37 +163,36 @@ export function OfficeCanvas() {
       walls.fill(0x0c0e15);
       world.addChild(walls);
 
-      // Fábrica de avatar (local e remoto).
-      const makeAvatar = (label: string, bodyColor: number) => {
-        const c = new PIXI.Container();
-        const body = new PIXI.Graphics().circle(0, 0, 10).fill(bodyColor).stroke({ width: 2, color: 0x1a1a1a });
-        const face = new PIXI.Graphics().circle(0, 0, 3).fill(0x1a1a1a);
+      // Cria um "outer" container (posição/nametag) + o compositor de camadas
+      // do avatar dentro dele. Usado tanto pro avatar local quanto remotos.
+      const makeAvatarShell = (label: string) => {
+        const outer = new PIXI.Container();
         const tag = new PIXI.Text({ text: label, style: { fill: 0xffffff, fontSize: 10, fontFamily: 'system-ui' } });
         tag.anchor.set(0.5, 1);
-        tag.y = -16;
-        c.addChild(body, face, tag);
-        world.addChild(c);
-        return { c, face, tag };
-      };
-
-      const setFacing = (face: Graphics, dir: Direction) => {
-        const [fx, fy] = FACE_OFFSET[dir];
-        face.x = fx;
-        face.y = fy;
+        tag.y = -58; // acima da cabeça (frame de 64px, ancorado em 0.85 vertical)
+        outer.addChild(tag);
+        world.addChild(outer);
+        return { outer, tag };
       };
 
       // Avatar local.
-      const meAv = makeAvatar(name, 0xffd27f);
-      meAv.c.x = map.spawn.x;
-      meAv.c.y = map.spawn.y;
-      meAv.tag.style.fill = STATUS_COLOR.WORKING;
+      const meShell = makeAvatarShell(name);
+      meShell.outer.x = map.spawn.x;
+      meShell.outer.y = map.spawn.y;
+      meShell.tag.style.fill = STATUS_COLOR.WORKING;
       let dir: Direction = 'down';
+      const meAvatar = await AvatarSprite.create(avatarConfig, ASSETS_BASE);
+      if (destroyed) {
+        meAvatar.destroy();
+        return;
+      }
+      meShell.outer.addChildAt(meAvatar.view, 0); // atrás do nametag
 
       // Avatares remotos.
       interface Remote {
-        c: Container;
-        face: Graphics;
-        tag: import('pixi.js').Text;
+        outer: Container;
+        tag: Text;
+        avatar: AvatarSprite | null;
         tx: number;
         ty: number;
         dir: Direction;
@@ -203,25 +202,38 @@ export function OfficeCanvas() {
         if (p.userId === userId) return;
         let r = remotes.get(p.userId);
         if (!r) {
-          const av = makeAvatar(p.name, 0x7fb0ff);
-          r = { c: av.c, face: av.face, tag: av.tag, tx: p.position.x, ty: p.position.y, dir: p.direction };
-          r.c.x = p.position.x;
-          r.c.y = p.position.y;
+          const shell = makeAvatarShell(p.name);
+          shell.outer.x = p.position.x;
+          shell.outer.y = p.position.y;
+          r = { outer: shell.outer, tag: shell.tag, avatar: null, tx: p.position.x, ty: p.position.y, dir: p.direction };
           remotes.set(p.userId, r);
+          setPeers(remotes.size);
+          const rec = r;
+          AvatarSprite.create(p.avatarConfig, ASSETS_BASE).then((av) => {
+            // Se o participante saiu enquanto a textura carregava, descarta.
+            if (remotes.get(p.userId) !== rec) {
+              av.destroy();
+              return;
+            }
+            av.setDirection(rec.dir);
+            rec.avatar = av;
+            rec.outer.addChildAt(av.view, 0);
+          });
         } else {
           r.tx = p.position.x;
           r.ty = p.position.y;
           r.dir = p.direction;
+          r.avatar?.setDirection(r.dir);
         }
         r.tag.style.fill = STATUS_COLOR[p.status];
-        setFacing(r.face, r.dir);
         setPeers(remotes.size);
       };
       const removeRemote = (id: string) => {
         const r = remotes.get(id);
         if (r) {
-          world.removeChild(r.c);
-          r.c.destroy({ children: true });
+          world.removeChild(r.outer);
+          r.avatar?.destroy();
+          r.outer.destroy({ children: true });
           remotes.delete(id);
           setPeers(remotes.size);
         }
@@ -247,7 +259,7 @@ export function OfficeCanvas() {
             r.ty = u.y;
             if (r.dir !== u.dir) {
               r.dir = u.dir;
-              setFacing(r.face, r.dir);
+              r.avatar?.setDirection(r.dir);
             }
           }
         }
@@ -255,6 +267,21 @@ export function OfficeCanvas() {
       socket.on('status_changed', ({ userId: id, status }: { userId: string; status: PresenceStatus }) => {
         const r = remotes.get(id);
         if (r) r.tag.style.fill = STATUS_COLOR[status];
+      });
+      socket.on('avatar_changed', ({ userId: id, avatarConfig: cfg }: { userId: string; avatarConfig: AvatarConfig }) => {
+        const r = remotes.get(id);
+        if (!r) return;
+        const oldAvatar = r.avatar;
+        AvatarSprite.create(cfg, ASSETS_BASE).then((av) => {
+          if (remotes.get(id) !== r) {
+            av.destroy();
+            return;
+          }
+          av.setDirection(r.dir);
+          r.avatar = av;
+          r.outer.addChildAt(av.view, 0);
+          oldAvatar?.destroy();
+        });
       });
 
       // Ponte de áudio por zona (LiveKit): conecta/desconecta a room conforme a zona.
@@ -317,7 +344,7 @@ export function OfficeCanvas() {
         setStatus: (st) => {
           socket.emit('set_status', { status: st });
           setOwnStatus(st);
-          meAv.tag.style.fill = STATUS_COLOR[st];
+          meShell.tag.style.fill = STATUS_COLOR[st];
         },
         toggleMic: () => {
           muted = !muted;
@@ -354,39 +381,53 @@ export function OfficeCanvas() {
         if (pressed.has('arrowright') || pressed.has('d')) dx += 1;
         if (pressed.has('arrowup') || pressed.has('w')) dy -= 1;
         if (pressed.has('arrowdown') || pressed.has('s')) dy += 1;
+        const isMoving = dx !== 0 || dy !== 0;
 
-        if (dx !== 0 || dy !== 0) {
+        if (isMoving) {
           const len = Math.hypot(dx, dy) || 1;
-          const moved = tryMove({ x: meAv.c.x, y: meAv.c.y }, (dx / len) * SPEED, (dy / len) * SPEED, grid);
-          meAv.c.x = moved.x;
-          meAv.c.y = moved.y;
+          const moved = tryMove(
+            { x: meShell.outer.x, y: meShell.outer.y },
+            (dx / len) * SPEED,
+            (dy / len) * SPEED,
+            grid,
+          );
+          meShell.outer.x = moved.x;
+          meShell.outer.y = moved.y;
           dir = facingFrom(dx, dy, dir);
-          setFacing(meAv.face, dir);
         }
+        meAvatar.setDirection(dir);
+        meAvatar.setMoving(isMoving);
+        meAvatar.update(app.ticker.deltaMS);
 
         // Emite movimento (throttled ~tick) quando a posição muda.
         const now = performance.now();
-        if ((meAv.c.x !== lastSentX || meAv.c.y !== lastSentY) && now - lastEmit >= 80) {
-          socket.emit('move', { x: meAv.c.x, y: meAv.c.y, dir });
+        if ((meShell.outer.x !== lastSentX || meShell.outer.y !== lastSentY) && now - lastEmit >= 80) {
+          socket.emit('move', { x: meShell.outer.x, y: meShell.outer.y, dir });
           lastEmit = now;
-          lastSentX = meAv.c.x;
-          lastSentY = meAv.c.y;
+          lastSentX = meShell.outer.x;
+          lastSentY = meShell.outer.y;
         }
 
-        // Interpolação dos remotos.
+        // Interpolação + animação dos remotos.
         for (const r of remotes.values()) {
-          r.c.x += (r.tx - r.c.x) * 0.25;
-          r.c.y += (r.ty - r.c.y) * 0.25;
+          const rdx = r.tx - r.outer.x;
+          const rdy = r.ty - r.outer.y;
+          r.outer.x += rdx * 0.25;
+          r.outer.y += rdy * 0.25;
+          if (r.avatar) {
+            r.avatar.setMoving(Math.hypot(rdx, rdy) > 0.5);
+            r.avatar.update(app.ticker.deltaMS);
+          }
         }
 
         // Câmera.
         const sw = app.screen.width;
         const sh = app.screen.height;
-        world.x = clamp(sw / 2 - meAv.c.x * SCALE, sw - mapW * SCALE, 0);
-        world.y = clamp(sh / 2 - meAv.c.y * SCALE, sh - mapH * SCALE, 0);
+        world.x = clamp(sw / 2 - meShell.outer.x * SCALE, sw - mapW * SCALE, 0);
+        world.y = clamp(sh / 2 - meShell.outer.y * SCALE, sh - mapH * SCALE, 0);
 
         // Zona.
-        const z = resolveZone({ x: meAv.c.x, y: meAv.c.y }, ZONES);
+        const z = resolveZone({ x: meShell.outer.x, y: meShell.outer.y }, ZONES);
         if ((z?.id ?? null) !== currentZoneId) {
           currentZoneId = z?.id ?? null;
           setZone(z);
@@ -401,10 +442,10 @@ export function OfficeCanvas() {
           tick: (n = 1) => {
             for (let i = 0; i < n; i++) app.ticker.update(performance.now() + i * 16);
           },
-          state: () => ({ x: meAv.c.x, y: meAv.c.y, dir, zone: currentZoneId }),
+          state: () => ({ x: meShell.outer.x, y: meShell.outer.y, dir, zone: currentZoneId }),
           connected: () => socket.connected,
           remotes: () =>
-            [...remotes.entries()].map(([id, r]) => ({ id, x: Math.round(r.c.x), y: Math.round(r.c.y), tx: r.tx, ty: r.ty })),
+            [...remotes.entries()].map(([id, r]) => ({ id, x: Math.round(r.outer.x), y: Math.round(r.outer.y), tx: r.tx, ty: r.ty })),
           socketDebug: () => ({
             connected: socket.connected,
             disconnected: socket.disconnected,

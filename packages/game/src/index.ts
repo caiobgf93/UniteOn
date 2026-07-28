@@ -81,3 +81,5 @@ export function facingFrom(dx: number, dy: number, current: Direction): Directio
   if (Math.abs(dx) >= Math.abs(dy)) return dx > 0 ? 'right' : 'left';
   return dy > 0 ? 'down' : 'up';
 }
+
+export { AvatarSprite } from './avatarSprite';
