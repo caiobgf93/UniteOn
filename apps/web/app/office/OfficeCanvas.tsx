@@ -218,12 +218,14 @@ export function OfficeCanvas() {
         }
       };
 
-      // Socket realtime.
+      // Socket realtime. Sem forçar transporte: deixa cair para polling se o
+      // upgrade para WebSocket puro for bloqueado (proxy/antivírus locais).
       const socket: Socket = io(REALTIME_URL, {
-        transports: ['websocket'],
         auth: token ? { token } : { devName: name, devUserId: userId },
       });
       socket.on('connect', () => socket.emit('join_space', { spaceId: DEMO_SPACE_ID }));
+      socket.on('connect_error', (err) => console.warn('[uniteon] socket connect_error:', err.message));
+      socket.on('error_event', (e) => console.warn('[uniteon] server error_event:', e));
       socket.on('space_state', (s: SpaceState) => s.participants.forEach(upsertRemote));
       socket.on('presence_join', (p: Participant) => upsertRemote(p));
       socket.on('presence_leave', ({ userId: id }: { userId: string }) => removeRemote(id));
@@ -394,6 +396,17 @@ export function OfficeCanvas() {
           connected: () => socket.connected,
           remotes: () =>
             [...remotes.entries()].map(([id, r]) => ({ id, x: Math.round(r.c.x), y: Math.round(r.c.y), tx: r.tx, ty: r.ty })),
+          socketDebug: () => ({
+            connected: socket.connected,
+            disconnected: socket.disconnected,
+            active: socket.active,
+            id: socket.id,
+            transport: (socket.io as unknown as { engine?: { transport?: { name?: string } } }).engine?.transport?.name,
+            authConfigured,
+            hasToken: Boolean(token),
+            apiUrl: API_URL,
+            realtimeUrl: REALTIME_URL,
+          }),
         };
       }
 

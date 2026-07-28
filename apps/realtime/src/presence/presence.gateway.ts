@@ -63,8 +63,8 @@ export class PresenceGateway
     setInterval(() => this.flushTick(), TICK_MS);
   }
 
-  handleConnection(client: Socket): void {
-    const identity = resolveIdentity(client.handshake.auth ?? {});
+  async handleConnection(client: Socket): Promise<void> {
+    const identity = await resolveIdentity(client.handshake.auth ?? {});
     if (!identity) {
       client.emit('error_event', { code: 'UNAUTHENTICATED', message: 'Autenticação inválida' });
       client.disconnect(true);
