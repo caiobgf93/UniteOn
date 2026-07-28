@@ -9,3 +9,4 @@ coverage/
 .env.*.local
 .DS_Store
 *.tsbuildinfo
+apps/web/public/assets/.stage/

@@ -7,13 +7,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "echo \"(game) no lint yet\""
+    "lint": "echo \"(game) no lint yet\"",
+    "assets:fetch": "bash scripts/fetch-lpc-sources.sh",
+    "assets:recolor": "node scripts/run-lpc-recolor.mjs",
+    "assets:build": "npm run assets:fetch && npm run assets:recolor"
   },
   "dependencies": {
     "@uniteon/shared": "workspace:*",
     "pixi.js": "^8.4.0"
   },
   "devDependencies": {
+    "pngjs": "^7.0.0",
     "typescript": "^5.6.0"
   }
 }

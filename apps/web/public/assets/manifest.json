@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "tilesets": {
+    "office": {
+      "src": "tilesets/kenney-roguelike-rpg/Spritesheet/roguelikeSheet_transparent.png",
+      "tileSize": 16,
+      "margin": 1,
+      "spacing": 0,
+      "sampleMaps": [
+        "tilesets/kenney-roguelike-rpg/Map/sample_indoor.tmx",
+        "tilesets/kenney-roguelike-rpg/Map/sample_map.tmx"
+      ],
+      "license": "CC0"
+    }
+  },
+  "maps": {},
+  "avatars": {
+    "sheets": ["walk", "idle"],
+    "layers": {
+      "body": {
+        "label": "Corpo",
+        "styles": {
+          "male": {
+            "colors": ["light", "amber", "olive", "brown", "black"]
+          }
+        }
+      },
+      "hair": {
+        "label": "Cabelo",
+        "styles": {
+          "long": { "colors": ["blonde", "light_brown", "dark_brown", "ginger", "black"] },
+          "bob": { "colors": ["blonde", "light_brown", "dark_brown", "ginger", "black"] },
+          "pixie": { "colors": ["blonde", "light_brown", "dark_brown", "ginger", "black"] }
+        }
+      },
+      "torso": {
+        "label": "Roupa (torso)",
+        "styles": {
+          "tshirt": { "colors": ["white"] },
+          "polo": { "colors": ["white"] }
+        }
+      },
+      "legs": {
+        "label": "Calça",
+        "styles": {
+          "pants": { "colors": ["white", "black"] }
+        }
+      },
+      "feet": {
+        "label": "Sapato",
+        "styles": {
+          "shoes": { "colors": ["white"] }
+        }
+      },
+      "glasses": {
+        "label": "Óculos",
+        "optional": true,
+        "styles": {
+          "glasses": { "colors": ["default"] },
+          "round": { "colors": ["default"] }
+        }
+      }
+    },
+    "pathTemplate": "sprites/avatars/{layer}/{style}/{color}/{sheet}.png"
+  },
+  "objects": {},
+  "audio": {}
+}
