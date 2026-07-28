@@ -26,6 +26,7 @@ import { authConfigured, getSupabase } from '../../lib/supabaseClient';
 const SCALE = 2;
 const SPEED = 2.4;
 const REALTIME_URL = process.env.NEXT_PUBLIC_REALTIME_URL ?? 'http://localhost:3002';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const ZONE_COLOR: Record<string, number> = {
   RECEPTION: 0x2f5d8a,
@@ -92,6 +93,10 @@ export function OfficeCanvas() {
         const meta = data.session.user.user_metadata as { name?: string } | undefined;
         name = meta?.name || data.session.user.email?.split('@')[0] || 'Colega';
         token = data.session.access_token;
+        // Provisiona (upsert) usuário + membership no banco a cada entrada. Fire-and-forget.
+        fetch(`${API_URL}/me`, { headers: { Authorization: `Bearer ${token}` } }).catch((e) =>
+          console.warn('[uniteon] /me falhou', e),
+        );
       } else {
         const params = new URLSearchParams(window.location.search);
         name = params.get('name') ?? `Convidado-${Math.floor(1000 + Math.random() * 9000)}`;

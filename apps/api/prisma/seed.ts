@@ -1,6 +1,8 @@
 /**
- * Seed do MVP-0: tenant LocusLog, usuários Caio e Vinicius, um Space com o
- * escritório inicial (layout + zonas). Idempotente (upsert por chaves naturais).
+ * Seed do MVP-0: tenant LocusLog + Space com o escritório inicial (layout +
+ * zonas). Idempotente (upsert por chaves naturais). Usuários NÃO são criados
+ * aqui — são provisionados no primeiro login real via GET /me
+ * (apps/api/src/me/me.service.ts), que faz upsert por id = sub do Supabase.
  */
 import { PrismaClient } from '@prisma/client';
 import { OFFICE_ZONES, buildOfficeTilemap } from '@uniteon/shared';
@@ -12,30 +14,6 @@ async function main() {
     where: { slug: 'locuslog' },
     update: {},
     create: { slug: 'locuslog', name: 'LocusLog', plan: 'pro' },
-  });
-
-  const caio = await prisma.user.upsert({
-    where: { email: 'caio@locuslog.com.br' },
-    update: {},
-    create: { email: 'caio@locuslog.com.br', name: 'Caio' },
-  });
-
-  const vinicius = await prisma.user.upsert({
-    where: { email: 'vinicius@locuslog.com.br' },
-    update: {},
-    create: { email: 'vinicius@locuslog.com.br', name: 'Vinicius' },
-  });
-
-  await prisma.membership.upsert({
-    where: { userId_organizationId: { userId: caio.id, organizationId: org.id } },
-    update: { role: 'ADMIN' },
-    create: { userId: caio.id, organizationId: org.id, role: 'ADMIN' },
-  });
-
-  await prisma.membership.upsert({
-    where: { userId_organizationId: { userId: vinicius.id, organizationId: org.id } },
-    update: { role: 'ADMIN' },
-    create: { userId: vinicius.id, organizationId: org.id, role: 'ADMIN' },
   });
 
   const space = await prisma.space.upsert({
