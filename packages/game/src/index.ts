@@ -1,7 +1,8 @@
 /**
- * @uniteon/game — lógica de mundo pura (sem PixiJS, sem React), reutilizável no
- * cliente (render/predição) e no servidor (autoridade). O render Pixi vive em
- * apps/web. Ver docs/DOMAIN-MODEL.md.
+ * @uniteon/game — lógica de mundo (colisão/movimento, usada tanto no cliente
+ * quanto no servidor/autoridade — essa parte é 100% pura, sem PixiJS) +
+ * helpers de renderização Pixi reutilizáveis pelo cliente (AvatarSprite,
+ * loadOfficeMap) que NÃO rodam no servidor. Ver docs/DOMAIN-MODEL.md.
  */
 import type { Direction, Vec2 } from '@uniteon/shared';
 import { TILE_SIZE } from '@uniteon/shared';
@@ -83,3 +84,4 @@ export function facingFrom(dx: number, dy: number, current: Direction): Directio
 }
 
 export { AvatarSprite } from './avatarSprite';
+export { loadOfficeMap } from './officeMapRenderer';

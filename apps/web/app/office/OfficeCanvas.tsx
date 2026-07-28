@@ -21,7 +21,7 @@ import {
   type SpaceState,
   type Zone,
 } from '@uniteon/shared';
-import { AvatarSprite, CollisionGrid, facingFrom, tryMove } from '@uniteon/game';
+import { AvatarSprite, CollisionGrid, facingFrom, loadOfficeMap, tryMove } from '@uniteon/game';
 import { io, type Socket } from 'socket.io-client';
 import type { Container, Text } from 'pixi.js';
 import { authConfigured, getSupabase } from '../../lib/supabaseClient';
@@ -32,14 +32,6 @@ const SCALE = 2;
 const SPEED = 2.4;
 const REALTIME_URL = process.env.NEXT_PUBLIC_REALTIME_URL ?? 'http://localhost:3002';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
-const ZONE_COLOR: Record<string, number> = {
-  RECEPTION: 0x2f5d8a,
-  HALLWAY: 0x3a3f4d,
-  OFFICE: 0x2f7d5b,
-  MEETING: 0x7d4f9c,
-  LOUNGE: 0xb5793a,
-};
 
 const ZONES: Zone[] = buildOfficeZones();
 
@@ -130,38 +122,21 @@ export function OfficeCanvas() {
       world.scale.set(SCALE);
       app.stage.addChild(world);
 
-      // Piso + grade.
-      const floor = new PIXI.Graphics();
-      floor.rect(0, 0, mapW, mapH).fill(0x1b1e2b);
-      for (let x = 0; x <= MAP_COLS; x++) floor.moveTo(x * TILE_SIZE, 0).lineTo(x * TILE_SIZE, mapH);
-      for (let y = 0; y <= MAP_ROWS; y++) floor.moveTo(0, y * TILE_SIZE).lineTo(mapW, y * TILE_SIZE);
-      floor.stroke({ width: 1, color: 0x262a3a });
-      world.addChild(floor);
-
-      // Zonas.
-      for (const z of ZONES) {
-        const g = new PIXI.Graphics();
-        g.rect(z.bounds.x, z.bounds.y, z.bounds.w, z.bounds.h).fill({ color: ZONE_COLOR[z.type] ?? 0x445, alpha: 0.35 });
-        g.rect(z.bounds.x, z.bounds.y, z.bounds.w, z.bounds.h).stroke({ width: 2, color: ZONE_COLOR[z.type] ?? 0x445, alpha: 0.9 });
-        world.addChild(g);
-        const label = new PIXI.Text({
-          text: z.audioMode === 'NONE' ? `${z.name}  ·  sem áudio` : z.name,
-          style: { fill: 0xdfe3ef, fontSize: 11, fontFamily: 'system-ui' },
-        });
-        label.x = z.bounds.x + 6;
-        label.y = z.bounds.y + 4;
-        world.addChild(label);
-      }
-
-      // Paredes.
-      const walls = new PIXI.Graphics();
-      for (let ty = 0; ty < MAP_ROWS; ty++) {
-        for (let tx = 0; tx < MAP_COLS; tx++) {
-          if (grid.isBlockedTile(tx, ty)) walls.rect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      // Mapa real (piso/paredes/móveis) — gerado no Passo 2 a partir da mesma
+      // fonte de zonas/colisão do @uniteon/shared. A área em pixels do mapa
+      // (tiles de 16px) já é idêntica à do grid lógico (32px) — sem escala extra.
+      try {
+        const officeMap = await loadOfficeMap(`${ASSETS_BASE}maps/office-01.json`);
+        if (destroyed) {
+          app.destroy(true);
+          return;
         }
+        world.addChild(officeMap);
+      } catch (err) {
+        // Sem isso, uma falha aqui trava o carregamento em silêncio (a
+        // promise rejeitada nunca é observada) e a cena nunca aparece.
+        console.error('[uniteon] loadOfficeMap falhou:', err);
       }
-      walls.fill(0x0c0e15);
-      world.addChild(walls);
 
       // Cria um "outer" container (posição/nametag) + o compositor de camadas
       // do avatar dentro dele. Usado tanto pro avatar local quanto remotos.
@@ -443,6 +418,24 @@ export function OfficeCanvas() {
             for (let i = 0; i < n; i++) app.ticker.update(performance.now() + i * 16);
           },
           state: () => ({ x: meShell.outer.x, y: meShell.outer.y, dir, zone: currentZoneId }),
+          worldDebug: () => ({
+            worldChildren: world.children.length,
+            worldChildLabels: world.children.map((c) => c.label),
+            worldX: world.x,
+            worldY: world.y,
+            worldScale: world.scale.x,
+            stageChildren: app.stage.children.length,
+            firstChildInfo: world.children[0]
+              ? {
+                  visible: world.children[0].visible,
+                  alpha: world.children[0].alpha,
+                  childCount: world.children[0].children.length,
+                  layerLabels: world.children[0].children.map((c) => c.label),
+                  layerCounts: world.children[0].children.map((c) => c.children.length),
+                  bounds: world.children[0].getBounds(),
+                }
+              : null,
+          }),
           connected: () => socket.connected,
           remotes: () =>
             [...remotes.entries()].map(([id, r]) => ({ id, x: Math.round(r.outer.x), y: Math.round(r.outer.y), tx: r.tx, ty: r.ty })),
