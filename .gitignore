@@ -10,3 +10,4 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 apps/web/public/assets/.stage/
+preview.local.png

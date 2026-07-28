@@ -10,7 +10,9 @@
     "lint": "echo \"(game) no lint yet\"",
     "assets:fetch": "bash scripts/fetch-lpc-sources.sh",
     "assets:recolor": "node scripts/run-lpc-recolor.mjs",
-    "assets:build": "npm run assets:fetch && npm run assets:recolor"
+    "assets:build": "npm run assets:fetch && npm run assets:recolor",
+    "map:build": "node scripts/build-office-map.mjs",
+    "map:preview": "node scripts/render-map-preview.mjs"
   },
   "dependencies": {
     "@uniteon/shared": "workspace:*",

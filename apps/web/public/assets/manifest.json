@@ -4,8 +4,9 @@
     "office": {
       "src": "tilesets/kenney-roguelike-rpg/Spritesheet/roguelikeSheet_transparent.png",
       "tileSize": 16,
-      "margin": 1,
-      "spacing": 0,
+      "margin": 0,
+      "spacing": 1,
+      "columns": 57,
       "sampleMaps": [
         "tilesets/kenney-roguelike-rpg/Map/sample_indoor.tmx",
         "tilesets/kenney-roguelike-rpg/Map/sample_map.tmx"
@@ -13,7 +14,18 @@
       "license": "CC0"
     }
   },
-  "maps": {},
+  "maps": {
+    "office-01": {
+      "src": "maps/office-01.json",
+      "format": "tiled-json",
+      "tileset": "office",
+      "generatedBy": "packages/game/scripts/build-office-map.mjs",
+      "logicalTileSize": 32,
+      "logicalCols": 40,
+      "logicalRows": 30,
+      "note": "Grid visual 80x60 @ 16px = mesma área em pixels do grid lógico 40x30 @ 32px (2 tiles visuais por tile lógico). Zonas/colisão continuam vindo de @uniteon/shared, este mapa é só a camada visual."
+    }
+  },
   "avatars": {
     "sheets": ["walk", "idle"],
     "layers": {
