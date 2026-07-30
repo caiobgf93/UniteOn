@@ -35,11 +35,17 @@ const TILE = {
   floorMeeting: 123, // piso pedra cinza — sala de reunião
   floorLounge: 122, // piso tijolo marrom — lounge
   wall: 704, // bloco de pedra cinza sólido — todas as paredes/colisão
+  window: 41, // janela (decorativa, substitui o bloco de parede em alguns pontos)
   desk: 253, // mesa individual (escritórios)
   chair: 251, // cadeira
   tableSeg: [362, 363, 364, 365], // mesa longa de 4 partes (sala de reunião)
   cabinet: 19, // armário 2 portas (armazenamento)
   counter: 29, // bancada com pia (copa do lounge)
+  deskItem: 897, // livro/papelada — acento sobre a mesa
+  bookshelf: 844, // estante com livros
+  plant: 654, // planta/arbusto verde
+  rugStone: 121, // piso pedra clara — acento de "tapete" (contraste no meeting)
+  rugWood: 120, // piso madeira — acento de "tapete" (contraste no lounge)
 };
 
 // --- Replica a mesma lógica lógica de colisão/zonas de office.ts (fonte de
@@ -128,25 +134,71 @@ function placeVisualRow(lx, ly, gids) {
   gids.forEach((gid, i) => setVisual(furniture, vx0 + i, vy, gid));
 }
 
-// Escritório do Caio (zona x:0-13,y:10-22): mesa + cadeira.
+/** Marca um bloco retangular (em tiles lógicos) no piso com um tile de
+ * acento (tapete) — desenhado por baixo dos móveis, que continuam na
+ * camada Furniture por cima. */
+function rugBlock(lx0, ly0, lx1, ly1, gid) {
+  for (let ly = ly0; ly <= ly1; ly++) {
+    for (let lx = lx0; lx <= lx1; lx++) setLogicalBlock(floor, lx, ly, gid);
+  }
+}
+
+// Recepção (x:0-40,y:0-6): plantas flanqueando a entrada.
+placeAt(3, 3, TILE.plant);
+placeAt(36, 3, TILE.plant);
+
+// Corredor (x:0-40,y:6-10): plantas de apoio.
+placeAt(10, 8, TILE.plant);
+placeAt(30, 8, TILE.plant);
+
+// Escritório do Caio (zona x:0-13,y:10-22): mesa + papelada + cadeira +
+// estante + armário + planta perto da porta.
 placeAt(4, 14, TILE.desk);
+placeAt(5, 14, TILE.deskItem);
 placeAt(4, 15, TILE.chair);
 placeAt(9, 18, TILE.cabinet);
+placeAt(11, 11, TILE.bookshelf);
+placeAt(2, 20, TILE.plant);
 
-// Escritório do Vinicius (zona x:13-26,y:10-22): mesa + cadeira.
+// Escritório do Vinicius (zona x:13-26,y:10-22): espelhado.
 placeAt(17, 14, TILE.desk);
+placeAt(18, 14, TILE.deskItem);
 placeAt(17, 15, TILE.chair);
 placeAt(22, 18, TILE.cabinet);
+placeAt(24, 11, TILE.bookshelf);
+placeAt(15, 20, TILE.plant);
 
-// Sala de Reunião (zona x:26-40,y:10-22): mesa longa de 4 partes (contígua,
-// em resolução visual de 16px) + cadeiras.
+// Sala de Reunião (zona x:26-40,y:10-22): tapete sob a mesa, mesa longa de
+// 4 partes (contígua, em resolução visual de 16px) + cadeiras dos dois
+// lados + planta no canto.
+rugBlock(29, 13, 34, 17, TILE.rugStone);
 placeVisualRow(30, 15, TILE.tableSeg);
+placeAt(30, 14, TILE.chair);
+placeAt(33, 14, TILE.chair);
 placeAt(30, 16, TILE.chair);
 placeAt(33, 16, TILE.chair);
+placeAt(38, 20, TILE.plant);
 
-// Lounge (zona x:0-40,y:22-30): balcão/copa.
+// Lounge (zona x:0-40,y:22-30): balcão/copa, tapete de estar, cantinho de
+// leitura (estante) e plantas.
+rugBlock(15, 25, 24, 28, TILE.rugWood);
 placeAt(4, 25, TILE.counter);
 placeAt(20, 25, TILE.counter);
+placeAt(2, 28, TILE.bookshelf);
+placeAt(10, 26, TILE.plant);
+placeAt(30, 26, TILE.plant);
+
+// Janelas decorativas em trechos da parede externa (substituem o bloco de
+// parede só visualmente — a colisão continua vindo do grid lógico).
+for (const [lx, ly] of [
+  [8, 0],
+  [18, 0],
+  [28, 0],
+  [8, 29],
+  [28, 29],
+]) {
+  setLogicalBlock(walls, lx, ly, TILE.window);
+}
 
 function tiledLayer(id, name, data) {
   return {

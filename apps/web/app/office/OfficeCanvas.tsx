@@ -142,6 +142,10 @@ export function OfficeCanvas() {
       // do avatar dentro dele. Usado tanto pro avatar local quanto remotos.
       const makeAvatarShell = (label: string) => {
         const outer = new PIXI.Container();
+        // Sombra elíptica sob os pés — dá noção de profundidade (o avatar
+        // "pisa" no chão em vez de flutuar sobre o tile).
+        const shadow = new PIXI.Graphics().ellipse(0, 2, 11, 4).fill({ color: 0x000000, alpha: 0.35 });
+        outer.addChild(shadow);
         const tag = new PIXI.Text({ text: label, style: { fill: 0xffffff, fontSize: 10, fontFamily: 'system-ui' } });
         tag.anchor.set(0.5, 1);
         tag.y = -58; // acima da cabeça (frame de 64px, ancorado em 0.85 vertical)
@@ -161,7 +165,7 @@ export function OfficeCanvas() {
         meAvatar.destroy();
         return;
       }
-      meShell.outer.addChildAt(meAvatar.view, 0); // atrás do nametag
+      meShell.outer.addChildAt(meAvatar.view, 1); // acima da sombra, atrás do nametag
 
       // Avatares remotos.
       interface Remote {
@@ -192,7 +196,7 @@ export function OfficeCanvas() {
             }
             av.setDirection(rec.dir);
             rec.avatar = av;
-            rec.outer.addChildAt(av.view, 0);
+            rec.outer.addChildAt(av.view, 1);
           });
         } else {
           r.tx = p.position.x;
@@ -254,7 +258,7 @@ export function OfficeCanvas() {
           }
           av.setDirection(r.dir);
           r.avatar = av;
-          r.outer.addChildAt(av.view, 0);
+          r.outer.addChildAt(av.view, 1);
           oldAvatar?.destroy();
         });
       });
@@ -395,11 +399,14 @@ export function OfficeCanvas() {
           }
         }
 
-        // Câmera.
+        // Câmera (segue o avatar local com suavização, em vez de grudar
+        // instantaneamente — mais parecido com o "follow" do Gather).
         const sw = app.screen.width;
         const sh = app.screen.height;
-        world.x = clamp(sw / 2 - meShell.outer.x * SCALE, sw - mapW * SCALE, 0);
-        world.y = clamp(sh / 2 - meShell.outer.y * SCALE, sh - mapH * SCALE, 0);
+        const targetX = clamp(sw / 2 - meShell.outer.x * SCALE, sw - mapW * SCALE, 0);
+        const targetY = clamp(sh / 2 - meShell.outer.y * SCALE, sh - mapH * SCALE, 0);
+        world.x += (targetX - world.x) * 0.12;
+        world.y += (targetY - world.y) * 0.12;
 
         // Zona.
         const z = resolveZone({ x: meShell.outer.x, y: meShell.outer.y }, ZONES);
