@@ -166,7 +166,11 @@ export class PresenceGateway
     if (newZone !== s.zoneId) {
       const fromZoneId = s.zoneId;
       s.zoneId = newZone;
-      client.emit('zone_changed', { userId: s.userId, fromZoneId, toZoneId: newZone });
+      // Broadcast pro space inteiro (não só o próprio) — a lista de
+      // participantes no cliente depende disso pra mostrar a zona de cada um.
+      this.server
+        .to(this.room(s.spaceId))
+        .emit('zone_changed', { userId: s.userId, fromZoneId, toZoneId: newZone });
       void this.presence.put(s.spaceId, toRecord(s)); // persiste troca de zona na hora
       void this.issueMedia(s); // ponte de áudio: entra na room da nova zona
     }
@@ -224,6 +228,22 @@ export class PresenceGateway
     this.server
       .to(this.room(s.spaceId))
       .emit('avatar_changed', { userId: s.userId, avatarConfig: s.avatarConfig });
+  }
+
+  @SubscribeMessage('chat_send')
+  onChatSend(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { channelId: string; body: string },
+  ): void {
+    const s = this.sessions.get(client.id);
+    const text = body.body?.trim();
+    if (!s || !text) return;
+    this.server.to(this.room(s.spaceId)).emit('chat_message', {
+      channelId: body.channelId,
+      senderId: s.userId,
+      body: text.slice(0, 500),
+      createdAt: new Date().toISOString(),
+    });
   }
 
   @SubscribeMessage('heartbeat')

@@ -47,10 +47,29 @@ const STATUS_ORDER: PresenceStatus[] = ['WORKING', 'AWAY', 'MEETING', 'OFFLINE']
 interface OfficeApi {
   setStatus: (s: PresenceStatus) => void;
   toggleMic: () => void;
+  sendChat: (body: string) => void;
 }
+
+interface ParticipantRow {
+  id: string;
+  name: string;
+  status: PresenceStatus;
+  zoneId: string | null;
+}
+
+interface ChatMessage {
+  channelId: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+}
+
+const CHAT_CHANNEL = 'global';
 
 export function OfficeCanvas() {
   const hostRef = useRef<HTMLDivElement>(null);
+  const minimapRef = useRef<HTMLCanvasElement>(null);
   const apiRef = useRef<OfficeApi | null>(null);
   const [zone, setZone] = useState<Zone | null>(null);
   const [peers, setPeers] = useState(0);
@@ -58,6 +77,10 @@ export function OfficeCanvas() {
   const [ownStatus, setOwnStatus] = useState<PresenceStatus>('WORKING');
   const [muted, setMuted] = useState(true);
   const [audioRoom, setAudioRoom] = useState('');
+  const [participants, setParticipants] = useState<ParticipantRow[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
 
   useEffect(() => {
     let destroyed = false;
@@ -167,6 +190,10 @@ export function OfficeCanvas() {
       }
       meShell.outer.addChildAt(meAvatar.view, 1); // acima da sombra, atrás do nametag
 
+      // userId → nome de exibição (usado pelo chat pra rotular mensagens de
+      // participantes remotos sem precisar guardar o Container inteiro).
+      const names = new Map<string, string>([[userId, name]]);
+
       // Avatares remotos.
       interface Remote {
         outer: Container;
@@ -175,16 +202,37 @@ export function OfficeCanvas() {
         tx: number;
         ty: number;
         dir: Direction;
+        name: string;
+        status: PresenceStatus;
+        zoneId: string | null;
       }
       const remotes = new Map<string, Remote>();
+      // Espelha `remotes` num state React leve (lista de participantes/painel
+      // lateral) — não guarda o Container/AvatarSprite, só o que a UI precisa.
+      const syncParticipants = () => {
+        setParticipants(
+          [...remotes.entries()].map(([id, r]) => ({ id, name: r.name, status: r.status, zoneId: r.zoneId })),
+        );
+      };
       const upsertRemote = (p: Participant) => {
         if (p.userId === userId) return;
+        names.set(p.userId, p.name);
         let r = remotes.get(p.userId);
         if (!r) {
           const shell = makeAvatarShell(p.name);
           shell.outer.x = p.position.x;
           shell.outer.y = p.position.y;
-          r = { outer: shell.outer, tag: shell.tag, avatar: null, tx: p.position.x, ty: p.position.y, dir: p.direction };
+          r = {
+            outer: shell.outer,
+            tag: shell.tag,
+            avatar: null,
+            tx: p.position.x,
+            ty: p.position.y,
+            dir: p.direction,
+            name: p.name,
+            status: p.status,
+            zoneId: p.zoneId,
+          };
           remotes.set(p.userId, r);
           setPeers(remotes.size);
           const rec = r;
@@ -204,8 +252,10 @@ export function OfficeCanvas() {
           r.dir = p.direction;
           r.avatar?.setDirection(r.dir);
         }
+        r.status = p.status;
         r.tag.style.fill = STATUS_COLOR[p.status];
         setPeers(remotes.size);
+        syncParticipants();
       };
       const removeRemote = (id: string) => {
         const r = remotes.get(id);
@@ -215,6 +265,7 @@ export function OfficeCanvas() {
           r.outer.destroy({ children: true });
           remotes.delete(id);
           setPeers(remotes.size);
+          syncParticipants();
         }
       };
 
@@ -245,8 +296,27 @@ export function OfficeCanvas() {
       });
       socket.on('status_changed', ({ userId: id, status }: { userId: string; status: PresenceStatus }) => {
         const r = remotes.get(id);
-        if (r) r.tag.style.fill = STATUS_COLOR[status];
+        if (!r) return;
+        r.status = status;
+        r.tag.style.fill = STATUS_COLOR[status];
+        syncParticipants();
       });
+      socket.on('zone_changed', ({ userId: id, toZoneId }: { userId: string; toZoneId: string | null }) => {
+        if (id === userId) return; // a própria zona já vem do resolveZone local, a cada tick
+        const r = remotes.get(id);
+        if (!r) return;
+        r.zoneId = toZoneId;
+        syncParticipants();
+      });
+      socket.on(
+        'chat_message',
+        (m: { channelId: string; senderId: string; body: string; createdAt: string }) => {
+          setMessages((prev) => [
+            ...prev.slice(-49),
+            { ...m, senderName: m.senderId === userId ? name : (names.get(m.senderId) ?? 'Colega') },
+          ]);
+        },
+      );
       socket.on('avatar_changed', ({ userId: id, avatarConfig: cfg }: { userId: string; avatarConfig: AvatarConfig }) => {
         const r = remotes.get(id);
         if (!r) return;
@@ -325,6 +395,11 @@ export function OfficeCanvas() {
           setOwnStatus(st);
           meShell.tag.style.fill = STATUS_COLOR[st];
         },
+        sendChat: (body) => {
+          const text = body.trim();
+          if (!text) return;
+          socket.emit('chat_send', { channelId: CHAT_CHANNEL, body: text });
+        },
         toggleMic: () => {
           muted = !muted;
           setMuted(muted);
@@ -352,6 +427,40 @@ export function OfficeCanvas() {
       let lastEmit = 0;
       let lastSentX = -1;
       let lastSentY = -1;
+
+      // Minimapa: canvas 2D comum (fora do Pixi) desenhado à parte, só com um
+      // retângulo por zona + um ponto por avatar. Redesenhado a cada poucos
+      // frames (não precisa ser todo tick) via 2D context puro — bem mais
+      // barato que manter isso como estado React.
+      const MINI_SCALE = 0.125; // 1280x960 → 160x120
+      let miniTick = 0;
+      const drawMinimap = () => {
+        const canvas = minimapRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'rgba(20,22,31,0.9)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        for (const z of ZONES) {
+          ctx.strokeRect(
+            z.bounds.x * MINI_SCALE,
+            z.bounds.y * MINI_SCALE,
+            z.bounds.w * MINI_SCALE,
+            z.bounds.h * MINI_SCALE,
+          );
+        }
+        for (const r of remotes.values()) {
+          ctx.fillStyle = `#${STATUS_COLOR[r.status].toString(16).padStart(6, '0')}`;
+          ctx.beginPath();
+          ctx.arc(r.outer.x * MINI_SCALE, r.outer.y * MINI_SCALE, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(meShell.outer.x * MINI_SCALE, meShell.outer.y * MINI_SCALE, 3, 0, Math.PI * 2);
+        ctx.fill();
+      };
 
       app.ticker.add(() => {
         let dx = 0;
@@ -414,6 +523,11 @@ export function OfficeCanvas() {
           currentZoneId = z?.id ?? null;
           setZone(z);
         }
+
+        // Minimapa a cada 6 frames (~10x/s a 60fps) — suficiente pra
+        // acompanhar posição sem redesenhar a cada tick.
+        miniTick = (miniTick + 1) % 6;
+        if (miniTick === 0) drawMinimap();
       });
 
       if (process.env.NODE_ENV !== 'production') {
@@ -573,7 +687,136 @@ export function OfficeCanvas() {
         >
           🧍 Avatar
         </button>
+        <button
+          onClick={() => setChatOpen((v) => !v)}
+          title="Chat"
+          style={{
+            fontSize: 13,
+            padding: '8px 12px',
+            borderRadius: 8,
+            cursor: 'pointer',
+            border: '1px solid #3a4056',
+            color: '#e8eaf2',
+            background: chatOpen ? 'rgba(255,255,255,0.12)' : 'transparent',
+          }}
+        >
+          💬 Chat
+        </button>
       </div>
+
+      {/* Minimapa + lista de participantes */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          width: 176,
+          padding: 8,
+          borderRadius: 8,
+          background: 'rgba(12,14,21,0.75)',
+          fontFamily: 'system-ui, sans-serif',
+        }}
+      >
+        <canvas
+          ref={minimapRef}
+          width={160}
+          height={120}
+          style={{ width: 160, height: 120, borderRadius: 4, display: 'block' }}
+        />
+        <div style={{ marginTop: 8, maxHeight: 160, overflowY: 'auto' }}>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#e8eaf2', padding: '3px 0' }}
+          >
+            <span>{STATUS_EMOJI[ownStatus]}</span>
+            <strong>{me}</strong>
+            <span style={{ opacity: 0.6 }}>(você)</span>
+          </div>
+          {participants.length === 0 && (
+            <div style={{ fontSize: 12, opacity: 0.5, padding: '3px 0' }}>Ninguém mais por aqui ainda.</div>
+          )}
+          {participants.map((p) => {
+            const z = ZONES.find((zz) => zz.id === p.zoneId);
+            return (
+              <div
+                key={p.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#e8eaf2', padding: '3px 0' }}
+              >
+                <span>{STATUS_EMOJI[p.status]}</span>
+                <span>{p.name}</span>
+                <span style={{ opacity: 0.5, marginLeft: 'auto' }}>{z ? z.name : '—'}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Chat (global, por enquanto — canais por zona ficam pra depois) */}
+      {chatOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 76,
+            right: 12,
+            width: 280,
+            height: 320,
+            display: 'flex',
+            flexDirection: 'column',
+            borderRadius: 12,
+            background: 'rgba(12,14,21,0.9)',
+            fontFamily: 'system-ui, sans-serif',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ padding: '8px 12px', fontSize: 13, opacity: 0.7, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+            Chat · geral
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {messages.length === 0 && <div style={{ fontSize: 12, opacity: 0.5 }}>Nenhuma mensagem ainda.</div>}
+            {messages.map((m, i) => (
+              <div key={i} style={{ fontSize: 13, color: '#e8eaf2' }}>
+                <strong>{m.senderName}:</strong> <span style={{ opacity: 0.9 }}>{m.body}</span>
+              </div>
+            ))}
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              apiRef.current?.sendChat(chatInput);
+              setChatInput('');
+            }}
+            style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Escreva uma mensagem…"
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid #3a4056',
+                background: '#1b1e2b',
+                color: '#e8eaf2',
+                fontSize: 13,
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: 'none',
+                background: '#2f7d5b',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              Enviar
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
