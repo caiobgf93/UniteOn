@@ -185,7 +185,13 @@ export function OfficeCanvas() {
       let dir: Direction = 'down';
       const meAvatar = await AvatarSprite.create(avatarConfig, ASSETS_BASE);
       if (destroyed) {
+        // Sem isso, o app (com o canvas já anexado ao DOM e o mapa/nametag já
+        // montados) fica órfão — nunca mais é destruído nem tem sua câmera
+        // atualizada, e continua renderizado por trás/ao lado da instância
+        // "de verdade" (visível como uma sombra + nametag verde parada perto
+        // do spawn). Acontece sobretudo no double-invoke do efeito em dev.
         meAvatar.destroy();
+        app.destroy(true, { children: true });
         return;
       }
       meShell.outer.addChildAt(meAvatar.view, 1); // acima da sombra, atrás do nametag

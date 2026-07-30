@@ -37,6 +37,15 @@
           }
         }
       },
+      "head": {
+        "label": "Cabeça (forma + rosto)",
+        "note": "Não é uma opção do usuário — sempre segue o mesmo tom de 'body.color' (ver avatarLayerFiles em packages/shared/src/avatar.ts). Sem essa camada o corpo (só do pescoço pra baixo) ficava sem cabeça.",
+        "styles": {
+          "human": {
+            "colors": ["light", "amber", "olive", "brown", "black"]
+          }
+        }
+      },
       "hair": {
         "label": "Cabelo",
         "styles": {

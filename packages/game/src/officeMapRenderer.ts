@@ -69,18 +69,33 @@ export async function loadOfficeMap(mapUrl: string): Promise<Container> {
     return tex;
   };
 
+  // Móveis/decoração ficam minúsculos ao lado do avatar (LPC ~32px de
+  // personagem visível vs. tile de 16px do Kenney) se desenhados 1:1 como
+  // piso/parede. Aumentamos só a camada Furniture, ancorada no centro do
+  // tile (não no canto), pra crescer sem sair da célula/desalinhar o grid
+  // de Floor/Walls, que precisam continuar exatos.
+  const FURNITURE_SCALE = 1.6;
+
   const root = new Container();
   for (const layer of map.layers) {
     if (layer.type !== 'tilelayer' || !layer.visible) continue;
     const layerContainer = new Container();
     layerContainer.label = layer.name;
+    const isFurniture = layer.name === 'Furniture';
     for (let ty = 0; ty < layer.height; ty++) {
       for (let tx = 0; tx < layer.width; tx++) {
         const gid = layer.data[ty * layer.width + tx];
         if (!gid) continue;
         const sprite = new Sprite(tileTexture(gid));
-        sprite.x = tx * ts.tilewidth;
-        sprite.y = ty * ts.tileheight;
+        if (isFurniture) {
+          sprite.anchor.set(0.5, 0.5);
+          sprite.x = tx * ts.tilewidth + ts.tilewidth / 2;
+          sprite.y = ty * ts.tileheight + ts.tileheight / 2;
+          sprite.scale.set(FURNITURE_SCALE);
+        } else {
+          sprite.x = tx * ts.tilewidth;
+          sprite.y = ty * ts.tileheight;
+        }
         layerContainer.addChild(sprite);
       }
     }

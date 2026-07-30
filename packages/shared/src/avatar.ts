@@ -94,13 +94,18 @@ export function avatarLayerPath(layer: string, style: string, color: string, she
 }
 
 /** Lista as camadas (com caminho de arquivo) de um AvatarConfig, na ordem de
- * empilhamento pro compositor (Passo 4): corpo → roupa → cabelo → óculos. */
+ * empilhamento pro compositor (Passo 4): corpo → cabeça → roupa → cabelo →
+ * óculos. A cabeça (forma + rosto) segue sempre o mesmo tom do corpo — não é
+ * uma escolha própria do usuário, então não entra em `AvatarConfig`/
+ * `AVATAR_OPTIONS`, só é derivada de `body.color` na hora de montar as
+ * camadas. */
 export function avatarLayerFiles(config: AvatarConfig, sheet: 'walk' | 'idle'): string[] {
   const files = [
     avatarLayerPath('body', config.body.style, config.body.color, sheet),
     avatarLayerPath('legs', config.legs.style, config.legs.color, sheet),
     avatarLayerPath('feet', config.feet.style, config.feet.color, sheet),
     avatarLayerPath('torso', config.torso.style, config.torso.color, sheet),
+    avatarLayerPath('head', 'human', config.body.color, sheet),
     avatarLayerPath('hair', config.hair.style, config.hair.color, sheet),
   ];
   if (config.glasses) files.push(avatarLayerPath('glasses', config.glasses.style, 'default', sheet));

@@ -22,6 +22,7 @@ recolorido é o mesmo do arquivo-base, a recolorização em si não é obra nova
 | Camada | Base (arquivo original) | Autores | Licenças |
 |---|---|---|---|
 | `body/male/*` (5 tons de pele) | `body/bodies/male/{walk,idle}.png` | bluecarrot16, JaidynReiman, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani, Johannes Sjölund (wulax), Stephen Challener (Redshrike) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
+| `head/human/*` (5 tons, forma+rosto compostos) | `head/heads/human/male/{walk,idle}.png` + `head/faces/male/neutral/{walk,idle}.png` | bluecarrot16, Benjamin K. Smith (BenCreating), Stephen Challener (Redshrike), JaidynReiman, Eliza Wyatt (ElizaWy) | OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0 |
 | `hair/long/*` (5 cores) | `hair/long/adult/{walk,idle}.png` | JaidynReiman, Manuel Riecke (MrBeast) | CC-BY-SA 3.0, GPL 3.0 |
 | `hair/bob/*` (5 cores) | `hair/bob/adult/{walk,idle}.png` | ElizaWy, bluecarrot16 | CC0 |
 | `hair/pixie/*` (5 cores) | `hair/pixie/adult/{walk,idle}.png` | JaidynReiman, Manuel Riecke (MrBeast) | CC-BY-SA 3.0, GPL 3.0 |
